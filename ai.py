@@ -24,11 +24,14 @@ SKIP करो (skip=true) अगर:
 नियम:
 - headline: ज़्यादा से ज़्यादा 40 अक्षर, पोस्टर वाली ज़ुबान, अंत में ! या ?, जैसे "अनंत सिंह का नीरज कुमार पर तंज!"
 - quote_line: अगर बयान है तो "बोले- '...'" या "कहा- '...'" फ़ॉर्मेट। (सिर्फ़ cricket में, जहां बयान नहीं है, वहां एक लाइन में सबसे अहम तथ्य लिखो, जैसे "भारत ने सीरीज़ 3-1 से जीती"। तथ्य ख़बर से ही लो।) ज़्यादा से ज़्यादा 75 अक्षर। बयान सिर्फ़ ख़बर के असली शब्दों से लो, अपनी तरफ़ से कुछ मत जोड़ो, quote मत गढ़ो। महिला नेता हों तो "बोलीं-"।
+- quote_headline: नेता के बयान का सबसे दमदार हिस्सा, ख़बर के असली शब्दों में, ज़्यादा से ज़्यादा 70 अक्षर, उद्धरण चिह्न के बिना। साफ़ सीधा बयान न हो तो ख़ाली छोड़ दो।
+- attribution: एक लाइन, ज़्यादा से ज़्यादा 45 अक्षर, शुरू में "-" के बिना, जैसे "RJD ने अनंत सिंह पर साधा निशाना" या "सम्राट चौधरी का कांग्रेस पर पलटवार"। बयान के हिसाब से क्रिया चुनो।
+- target_name_en: जिस व्यक्ति पर/बारे में बयान है उसका अंग्रेज़ी में पूरा नाम (जैसे "Anant Singh")। अगर किसी एक व्यक्ति पर नहीं है तो ख़ाली।
 - caption: 3-4 छोटी लाइनें देवनागरी में, तथ्य सही और निष्पक्ष, किसी पार्टी का पक्ष मत लो, गाली/अपशब्द नहीं। आख़िरी लाइन में पूछो/कहो कि आप क्या सोचते हैं (कमेंट में बताएं)।
 - hashtags: 4 से 6, देवनागरी या अंग्रेज़ी, पहला हमेशा #Bharatdecode
 
 सिर्फ़ यह JSON लौटाओ, और कुछ नहीं:
-{{"skip": false, "skip_reason": "", "headline": "", "quote_line": "", "caption": "", "hashtags": ["#Bharatdecode"]}}
+{{"skip": false, "skip_reason": "", "headline": "", "quote_line": "", "quote_headline": "", "attribution": "", "target_name_en": "", "caption": "", "hashtags": ["#Bharatdecode"]}}
 
 ख़बर का स्रोत: {source}
 क्षेत्र: {region}
@@ -137,7 +140,11 @@ def make_draft(item, body):
         if not str(d.get(k, "")).strip():
             print(f"  Gemini output mein '{k}' khali")
             return None
-    out_text = " ".join([d["headline"], d["quote_line"], d["caption"]])
+    for k in ("quote_headline", "attribution", "target_name_en"):
+        d[k] = str(d.get(k) or "").strip()
+    d["quote_headline"] = d["quote_headline"].strip("\"'‘’“”")
+    out_text = " ".join([d["headline"], d["quote_line"], d["caption"],
+                         d["quote_headline"], d["attribution"]])
     hit = blocked_reason(out_text)
     if hit:
         print(f"  output mein blocked shabd: {hit}")

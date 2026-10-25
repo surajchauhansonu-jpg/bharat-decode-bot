@@ -21,10 +21,10 @@ class Telegram:
         return self._call("sendMessage", chat_id=self.chat_id, text=text[:4000],
                           disable_web_page_preview="true")
 
-    def send_photo_with_buttons(self, jpg, draft_id):
+    def send_photo_with_buttons(self, jpg, draft_id, tag="1"):
         kb = {"inline_keyboard": [[
-            {"text": "✅ Post karo", "callback_data": f"ok:{draft_id}"},
-            {"text": "❌ Reject", "callback_data": f"no:{draft_id}"},
+            {"text": f"✅ Design {tag} post karo", "callback_data": f"ok:{draft_id}:{tag}"},
+            {"text": "❌ Reject", "callback_data": f"no:{draft_id}:{tag}"},
         ]]}
         return self._call("sendPhoto", chat_id=self.chat_id,
                           reply_markup=json.dumps(kb),
@@ -57,12 +57,12 @@ class Telegram:
 
 
 def wait_for_decision(tg, draft_id, message_id, minutes, offset):
-    """'ok' / 'no' / None (timeout) return karta hai."""
+    """("ok"/"no", design_tag) ya (None, None) timeout par."""
     deadline = time.time() + minutes * 60
     while True:
         remaining = deadline - time.time()
         if remaining <= 2:
-            return None
+            return None, None
         for u in tg.get_updates(offset, timeout=int(min(50, remaining))):
             offset = u["update_id"] + 1
             cb = u.get("callback_query")
@@ -71,9 +71,12 @@ def wait_for_decision(tg, draft_id, message_id, minutes, offset):
             msg = cb.get("message") or {}
             if msg.get("chat", {}).get("id") != tg.chat_id:
                 continue
-            action, _, did = (cb.get("data") or "").partition(":")
+            parts = (cb.get("data") or "").split(":")
+            action = parts[0]
+            did = parts[1] if len(parts) > 1 else ""
+            tag = parts[2] if len(parts) > 2 else "1"
             if did != draft_id:
                 tg.answer_callback(cb["id"], "Ye purana draft hai")
                 continue
             tg.answer_callback(cb["id"], "Ok")
-            return action
+            return action, tag
