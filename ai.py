@@ -38,23 +38,54 @@ SKIP करो (skip=true) अगर:
 """
 
 
+_state = {"model": None}
+BASE = "https://generativelanguage.googleapis.com/v1beta"
+
+
+def _pick_model(key, exclude):
+    """Key par available sabse naya 'flash' model dhundo."""
+    r = requests.get(f"{BASE}/models", params={"key": key, "pageSize": 200}, timeout=30)
+    r.raise_for_status()
+    names = []
+    for m in r.json().get("models", []):
+        n = m["name"].split("/")[-1]
+        if ("generateContent" in m.get("supportedGenerationMethods", [])
+                and "flash" in n and n != exclude
+                and not any(x in n for x in ("lite", "image", "tts", "live", "audio",
+                                              "thinking", "exp", "embedding"))):
+            names.append(n)
+    # stable (bina 'preview') pehle, phir naam ke hisaab se naya pehle
+    names.sort(key=lambda n: ("preview" in n, n), reverse=False)
+    stable = [n for n in names if "preview" not in n]
+    pool = stable or names
+    return sorted(pool, reverse=True)[0] if pool else None
+
+
 def _call(prompt):
     key = os.environ["GEMINI_API_KEY"]
-    url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-           f"{GEMINI_MODEL}:generateContent?key={key}")
+    model = _state["model"] or GEMINI_MODEL
     body = {"contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"temperature": 0.4,
                                  "responseMimeType": "application/json"}}
-    for attempt in range(3):
-        r = requests.post(url, json=body, timeout=90)
+    for attempt in range(5):
+        r = requests.post(f"{BASE}/models/{model}:generateContent?key={key}",
+                          json=body, timeout=90)
+        if r.status_code == 404:
+            alt = _pick_model(key, exclude=model)
+            if not alt:
+                r.raise_for_status()
+            print(f"  model '{model}' nahi mila, '{alt}' try kar raha hu")
+            model = alt
+            continue
         if r.status_code in (429, 503):
             time.sleep(20 * (attempt + 1))
             continue
         r.raise_for_status()
+        _state["model"] = model
         txt = r.json()["candidates"][0]["content"]["parts"][0]["text"]
         txt = re.sub(r"^```(?:json)?|```$", "", txt.strip(), flags=re.M).strip()
         return json.loads(txt)
-    raise RuntimeError("Gemini busy/rate-limited")
+    raise RuntimeError("Gemini busy/rate-limited ya model nahi mila")
 
 
 def make_draft(item, body):

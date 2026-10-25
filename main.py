@@ -33,6 +33,7 @@ def pick_draft(seen):
     print(f"{len(items)} nayi news mili")
     items.sort(key=filters.score, reverse=True)
     checks = 0
+    gemini_fails = 0
     for it in items:
         if checks >= MAX_GEMINI_CHECKS or filters.score(it) < 3:
             break
@@ -65,12 +66,16 @@ def pick_draft(seen):
             seen.append(it["link"])
             continue
         checks += 1
-        seen.append(it["link"])
         try:
             draft = ai.make_draft(it, body)
         except Exception as ex:
             print("  Gemini fail:", ex)
+            gemini_fails += 1
+            if gemini_fails >= 2:
+                print("Gemini lagatar fail, is run mein rok raha hu")
+                break
             continue
+        seen.append(it["link"])
         if draft:
             return it, draft, photo
     return None, None, None
