@@ -23,7 +23,7 @@ class Telegram:
 
     def send_photo_with_buttons(self, jpg, draft_id, tag="1"):
         kb = {"inline_keyboard": [[
-            {"text": f"✅ Design {tag} post karo", "callback_data": f"ok:{draft_id}:{tag}"},
+            {"text": "✅ Post karo", "callback_data": f"ok:{draft_id}:{tag}"},
             {"text": "❌ Reject", "callback_data": f"no:{draft_id}:{tag}"},
         ]]}
         return self._call("sendPhoto", chat_id=self.chat_id,

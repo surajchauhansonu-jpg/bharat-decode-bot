@@ -8,7 +8,6 @@ import ai
 import facebook
 import filters
 import news
-import people
 import poster
 from config import (ACTIVE_FROM_HOUR, ACTIVE_TO_HOUR, MAX_GEMINI_CHECKS,
                     WAIT_MINUTES)
@@ -97,47 +96,31 @@ def main():
         print("Is baar post layak news nahi mili")
         return
 
-    posters = {"1": poster.make_poster(photo, draft["headline"], draft["quote_line"])}
-    inset_note = ""
-    if draft.get("quote_headline") and draft.get("attribution"):
-        try:
-            inset, src = people.find(draft.get("target_name_en"))
-            posters["2"] = poster.make_poster_quote(photo, draft["quote_headline"],
-                                                    draft["attribution"], inset)
-            inset_note = f"\n\n🖼 Design 2 inset photo: {src}"
-        except Exception as ex:
-            print("Design 2 fail:", ex)
+    jpg = poster.make_poster(photo, draft["headline"], draft["quote_line"])
 
     tg = Telegram(os.environ["TELEGRAM_BOT_TOKEN"], os.environ["TELEGRAM_CHAT_ID"])
     offset = tg.drain()
     draft_id = uuid.uuid4().hex[:8]
     tg.send_message(f"📝 CAPTION\n\n{draft['full_caption']}\n\n"
-                    f"🔗 {item['title']}\n{item['link']}{inset_note}")
-    msg_ids = {}
-    for tag, jpg in posters.items():
-        msg_ids[tag] = tg.send_photo_with_buttons(jpg, draft_id, tag)["message_id"]
-    print(f"Telegram par {len(posters)} design bheje, {WAIT_MINUTES} min wait...")
+                    f"🔗 {item['title']}\n{item['link']}")
+    msg = tg.send_photo_with_buttons(jpg, draft_id)
+    print(f"Telegram par draft bheja (layout {draft['layout']}), {WAIT_MINUTES} min wait...")
 
-    decision, tag = wait_for_decision(tg, draft_id, None, WAIT_MINUTES, offset)
-
-    def status(text):
-        for mid in msg_ids.values():
-            tg.set_status(mid, text)
-
-    if decision == "ok" and tag in posters:
+    decision, _ = wait_for_decision(tg, draft_id, msg["message_id"], WAIT_MINUTES, offset)
+    if decision == "ok":
         try:
             facebook.post_photo(os.environ["FB_PAGE_ID"], os.environ["FB_PAGE_TOKEN"],
-                                posters[tag], draft["full_caption"])
-            status(f"✅ Design {tag} Facebook par post ho gaya")
-            print("Posted design", tag)
+                                jpg, draft["full_caption"])
+            tg.set_status(msg["message_id"], "✅ Facebook par post ho gaya")
+            print("Posted")
         except Exception as ex:
-            status("⚠️ Post fail hua")
+            tg.set_status(msg["message_id"], "⚠️ Post fail hua")
             tg.send_message(f"Facebook post fail:\n{ex}")
             raise
     elif decision == "no":
-        status("❌ Reject kiya")
+        tg.set_status(msg["message_id"], "❌ Reject kiya")
     else:
-        status("⌛ Time khatam, draft expire")
+        tg.set_status(msg["message_id"], "⌛ Time khatam, draft expire")
 
 
 if __name__ == "__main__":
