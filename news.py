@@ -9,7 +9,7 @@ import requests
 from bs4 import BeautifulSoup
 from PIL import Image
 
-from config import FEEDS, SITE_PAGES, MAX_AGE_HOURS, UA
+from config import (FEEDS, SITE_PAGES, MAX_AGE_HOURS, UA, SOURCE_FB_PAGE_ID, SOURCE_FB_ACCESS_TOKEN, FB_GRAPH_VERSION)
 
 HEADERS = {
     "User-Agent": UA,
@@ -199,6 +199,90 @@ def scrape_site_page(site):
     return results
 
 
+
+def fetch_facebook_page_posts():
+    """Fetch recent public posts from the configured source Page via Meta Graph API.
+    Requires a valid token and approved permissions for a Page the app does not manage.
+    """
+    if not SOURCE_FB_ACCESS_TOKEN:
+        print("[facebook source] SOURCE_FB_ACCESS_TOKEN missing; source monitor disabled")
+        return []
+
+    endpoint = f"https://graph.facebook.com/{FB_GRAPH_VERSION}/{SOURCE_FB_PAGE_ID}/posts"
+    params = {
+        "fields": (
+            "id,message,created_time,permalink_url,full_picture,"
+            "attachments{type,url,target,media,subattachments}"
+        ),
+        "limit": 25,
+        "access_token": SOURCE_FB_ACCESS_TOKEN,
+    }
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=MAX_AGE_HOURS)
+    out = []
+    try:
+        response = requests.get(endpoint, params=params, timeout=25)
+        if response.status_code >= 400:
+            # Do not print token-bearing URL or response request URL.
+            try:
+                err = response.json().get("error", {})
+                detail = f"HTTP {response.status_code}: {err.get('message', response.text[:250])}"
+            except Exception:
+                detail = f"HTTP {response.status_code}: {response.text[:250]}"
+            print(f"[facebook source fail] {detail}")
+            return []
+        payload = response.json()
+        for post in payload.get("data", []):
+            message = _text(post.get("message", ""))
+            link = post.get("permalink_url")
+            if not link:
+                continue
+            pub = _parse_datetime(post.get("created_time"))
+            if not pub or pub < cutoff:
+                continue
+
+            image = post.get("full_picture")
+            article_url = None
+            attachments = (post.get("attachments") or {}).get("data") or []
+            if attachments:
+                att = attachments[0]
+                target = att.get("target") or {}
+                candidate = target.get("url") or att.get("url")
+                if candidate and candidate.startswith(("http://", "https://")):
+                    # Ignore Facebook's own post URL as an article URL.
+                    if "facebook.com/" not in candidate.lower() and "fb.watch/" not in candidate.lower():
+                        article_url = candidate
+                media = att.get("media") or {}
+                image_data = media.get("image") or {}
+                image = image or image_data.get("src")
+                if not image:
+                    for sub in att.get("subattachments", {}).get("data", []):
+                        sub_media = sub.get("media") or {}
+                        sub_img = (sub_media.get("image") or {}).get("src")
+                        if sub_img:
+                            image = sub_img
+                            break
+
+            if not message and not article_url:
+                continue
+            out.append({
+                "title": message.splitlines()[0][:220] if message else "Facebook Page par nayi news",
+                "summary": message[:1200],
+                "link": link,
+                "article_url": article_url,
+                "published": pub,
+                "source": "Facebook Source Page",
+                "region": "bihar",
+                "image": image,
+                "facebook_post_id": post.get("id"),
+            })
+    except Exception as ex:
+        print(f"[facebook source fail] {type(ex).__name__}: {ex}")
+        return []
+    print(f"[facebook source] {len(out)} recent posts fetched")
+    return out
+
+
+
 def collect():
     items, seen = [], set()
     for feed in FEEDS:
@@ -220,6 +304,12 @@ def collect():
                     items.append(it)
         except Exception as ex:
             print(f"[site scrape fail] {site['name']}: {ex}")
+
+    # Monitor the supplied Facebook Page, if an authorized token is configured.
+    for it in fetch_facebook_page_posts():
+        if it["link"] not in seen:
+            seen.add(it["link"])
+            items.append(it)
     return items
 
 

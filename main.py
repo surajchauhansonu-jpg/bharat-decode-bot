@@ -43,10 +43,26 @@ def pick_draft(seen):
             print(f"  blocked ({hit})")
             seen.append(it["link"])
             continue
-        try:
-            body, og = news.fetch_article(it["link"])
-        except Exception as ex:
-            print("  article fetch fail:", ex)
+        is_facebook_source = it.get("source") == "Facebook Source Page"
+        article_url = it.get("article_url")
+        if is_facebook_source and article_url:
+            try:
+                body, og = news.fetch_article(article_url)
+            except Exception as ex:
+                print("  linked article fetch fail; fallback to Facebook post text:", ex)
+                body, og = it.get("summary", ""), None
+        elif is_facebook_source:
+            body, og = it.get("summary", ""), None
+        else:
+            try:
+                body, og = news.fetch_article(it["link"])
+            except Exception as ex:
+                print("  article fetch fail:", ex)
+                continue
+
+        if len(body.strip()) < 60:
+            print("  content bahut chhota hai, skip")
+            seen.append(it["link"])
             continue
         hit = filters.blocked_reason(body)
         if hit:

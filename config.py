@@ -63,6 +63,12 @@ FEEDS = [
     },
 ]
 
+# Optional Facebook source Page to monitor.
+# Reading another Page requires a token/app with Meta-approved Page Public Content Access.
+SOURCE_FB_PAGE_ID = os.getenv("SOURCE_FB_PAGE_ID", "100095141476402")
+SOURCE_FB_ACCESS_TOKEN = os.getenv("SOURCE_FB_ACCESS_TOKEN", "")
+FB_GRAPH_VERSION = os.getenv("FB_GRAPH_VERSION", "v26.0")
+
 # Website/category pages: fallback collection when a reliable RSS feed is not configured.
 # Page scraping is best-effort; articles without a detectable recent date are excluded
 # by default to avoid accidentally reposting old stories.
