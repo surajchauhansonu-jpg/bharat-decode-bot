@@ -38,6 +38,9 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
           FB_PAGE_TOKEN: ${{ secrets.FB_PAGE_TOKEN }}
+          SOURCE_FB_PAGE_ID: "100095141476402"
+          SOURCE_FB_ACCESS_TOKEN: ${{ secrets.SOURCE_FB_ACCESS_TOKEN }}
+          FB_GRAPH_VERSION: "v26.0"
       - name: Save seen.json
         if: always()
         run: |
