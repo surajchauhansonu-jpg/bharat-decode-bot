@@ -28,49 +28,69 @@ def save_seen(seen):
 
 
 def pick_draft(seen):
-    """Pehla article jo saare filter + Gemini pass kare. (item, draft, photo) return."""
-    items = [i for i in news.collect() if i["link"] not in seen]
+    """Pehla article jo saare filter + Gemini pass kare.
+    (item, draft, photo) return. Ek khabar ke kai sources ho to sab ka text milata hai."""
+    all_items = news.collect()
+    old_titles = [s[2:] for s in seen if s.startswith("T:")][-300:]
+    items = [i for i in all_items if i["link"] not in seen]
     print(f"{len(items)} nayi news mili")
     items.sort(key=filters.score, reverse=True)
+
+    def mark(it):
+        seen.append(it["link"])
+        seen.append("T:" + it["title"])
+
     checks = 0
     gemini_fails = 0
     for it in items:
         if checks >= MAX_GEMINI_CHECKS or filters.score(it) < 3:
             break
         print(f"\n[{filters.score(it)}] {it['source']}: {it['title']}")
+        if news.is_duplicate(it["title"], old_titles):
+            print("  duplicate (ye khabar pehle ho chuki), skip")
+            seen.append(it["link"])
+            continue
         hit = filters.blocked_reason(it["title"] + " " + it["summary"])
         if hit:
             print(f"  blocked ({hit})")
-            seen.append(it["link"])
+            mark(it)
             continue
-        is_facebook_source = it.get("source") == "Facebook Source Page"
-        article_url = it.get("article_url")
-        if is_facebook_source and article_url:
-            try:
-                body, og = news.fetch_article(article_url)
-            except Exception as ex:
-                print("  linked article fetch fail; fallback to Facebook post text:", ex)
-                body, og = it.get("summary", ""), None
-        elif is_facebook_source:
-            body, og = it.get("summary", ""), None
-        else:
-            try:
-                body, og = news.fetch_article(it["link"])
-            except Exception as ex:
-                print("  article fetch fail:", ex)
-                continue
-
-        if len(body.strip()) < 60:
-            print("  content bahut chhota hai, skip")
-            seen.append(it["link"])
+        try:
+            body, og, extra = news.fetch_article(it["link"])
+        except Exception as ex:
+            print("  article fetch fail:", ex)
             continue
         hit = filters.blocked_reason(body)
         if hit:
             print(f"  blocked in body ({hit})")
-            seen.append(it["link"])
+            mark(it)
             continue
+
+        # doosre sources par wahi khabar
+        extras, keywords, photo_urls = [], list(extra["keywords"]), [og, it["image"]]
+        unsafe = False
+        for rel in news.find_related(it, all_items, k=2):
+            try:
+                rbody, rog, rextra = news.fetch_article(rel["link"])
+            except Exception as ex:
+                print(f"  related fetch fail ({rel['source']}):", ex)
+                continue
+            hit = filters.blocked_reason(rel["title"] + " " + rbody)
+            if hit:
+                print(f"  related source mein blocked ({hit}), pura skip")
+                unsafe = True
+                break
+            print(f"  + related: {rel['source']}: {rel['title']}")
+            extras.append((rel["source"], rbody))
+            keywords += rextra["keywords"]
+            photo_urls += [rog, rel["image"]]
+            seen.append(rel["link"])
+        if unsafe:
+            mark(it)
+            continue
+
         photo = None
-        for url in (og, it["image"]):
+        for url in photo_urls:
             if url:
                 try:
                     photo = news.download_image(url)
@@ -79,11 +99,11 @@ def pick_draft(seen):
                     print("  image fail:", ex)
         if photo is None:
             print("  photo nahi mili, skip")
-            seen.append(it["link"])
+            mark(it)
             continue
         checks += 1
         try:
-            draft = ai.make_draft(it, body)
+            draft = ai.make_draft(it, body, extras, list(dict.fromkeys(keywords))[:15])
         except Exception as ex:
             print("  Gemini fail:", ex)
             gemini_fails += 1
@@ -91,7 +111,7 @@ def pick_draft(seen):
                 print("Gemini lagatar fail, is run mein rok raha hu")
                 break
             continue
-        seen.append(it["link"])
+        mark(it)
         if draft:
             return it, draft, photo
     return None, None, None

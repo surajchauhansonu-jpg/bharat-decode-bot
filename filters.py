@@ -82,6 +82,8 @@ def score(item: dict) -> int:
         s += 2
     if item["region"] == "bihar":
         s += 2
+    if item.get("priority"):
+        s += 2
     if item["region"] == "cricket":
         # cricket mein bayan zaroori nahi: bada player/board + cricket keyword kaafi hai
         if any(p in title for p in CRICKET_PEOPLE):
