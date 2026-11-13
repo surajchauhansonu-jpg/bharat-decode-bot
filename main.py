@@ -134,6 +134,25 @@ def main():
 
     jpg = poster.make_poster(photo, draft["headline"], draft["quote_line"])
 
+    if os.getenv("AUTO_POST") == "1":
+        approve_and_post(item, draft, jpg)   # purana tarika: approve button -> Facebook post
+    else:
+        deliver_to_group(item, draft, jpg)   # naya tarika: group mein poster + caption
+
+
+def deliver_to_group(item, draft, jpg):
+    """Poster + caption + hashtags Telegram group mein bhejo. Na wait, na Facebook post."""
+    token = os.getenv("MANUAL_BOT_TOKEN") or os.environ["TELEGRAM_BOT_TOKEN"]
+    chat = os.getenv("MANUAL_CHAT_ID") or os.environ["TELEGRAM_CHAT_ID"]
+    tg = Telegram(token, chat)
+    tg.send_photo(jpg)
+    tg.send_message(f"📝 CAPTION\n\n{draft['full_caption']}\n\n"
+                    f"🪧 Poster text: {draft['headline']} | {draft['quote_line']}\n\n"
+                    f"🔗 {item['title']}\n{item['link']}")
+    print(f"Group mein bhej diya (layout {draft['layout']})")
+
+
+def approve_and_post(item, draft, jpg):
     tg = Telegram(os.environ["TELEGRAM_BOT_TOKEN"], os.environ["TELEGRAM_CHAT_ID"])
     offset = tg.drain()
     draft_id = uuid.uuid4().hex[:8]

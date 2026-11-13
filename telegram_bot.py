@@ -30,6 +30,12 @@ class Telegram:
                           reply_markup=json.dumps(kb),
                           files={"photo": ("poster.jpg", jpg, "image/jpeg")})
 
+    def send_photo(self, jpg, caption=""):
+        kw = {"chat_id": self.chat_id}
+        if caption:
+            kw["caption"] = caption[:1000]
+        return self._call("sendPhoto", files={"photo": ("poster.jpg", jpg, "image/jpeg")}, **kw)
+
     def drain(self):
         """Purane pending updates saaf karo, taaki purane button dab na jayein."""
         ups = self._call("getUpdates", timeout=0)
