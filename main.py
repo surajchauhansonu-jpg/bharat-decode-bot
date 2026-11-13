@@ -142,14 +142,21 @@ def main():
 
 def deliver_to_group(item, draft, jpg):
     """Poster + caption + hashtags Telegram group mein bhejo. Na wait, na Facebook post."""
-    token = os.getenv("MANUAL_BOT_TOKEN") or os.environ["TELEGRAM_BOT_TOKEN"]
-    chat = os.getenv("MANUAL_CHAT_ID") or os.environ["TELEGRAM_CHAT_ID"]
+    m_token, m_chat = os.getenv("MANUAL_BOT_TOKEN"), os.getenv("MANUAL_CHAT_ID")
+    using_group = bool(m_token and m_chat)
+    token = m_token if using_group else os.environ["TELEGRAM_BOT_TOKEN"]
+    chat = m_chat if using_group else os.environ["TELEGRAM_CHAT_ID"]
+    kind = "GROUP" if str(chat).startswith("-") else "PRIVATE chat"
+    src = "MANUAL_* secrets" if using_group else "TELEGRAM_* secrets (MANUAL_BOT_TOKEN/MANUAL_CHAT_ID nahi mile!)"
+    print(f"Bhej raha hu: {kind} ({src})")
     tg = Telegram(token, chat)
     tg.send_photo(jpg)
-    tg.send_message(f"📝 CAPTION\n\n{draft['full_caption']}\n\n"
+    note = "" if using_group else ("⚠️ Group secrets (MANUAL_BOT_TOKEN, MANUAL_CHAT_ID) GitHub mein "
+                                   "nahi mile, isliye yahan bheja.\n\n")
+    tg.send_message(f"{note}📝 CAPTION\n\n{draft['full_caption']}\n\n"
                     f"🪧 Poster text: {draft['headline']} | {draft['quote_line']}\n\n"
                     f"🔗 {item['title']}\n{item['link']}")
-    print(f"Group mein bhej diya (layout {draft['layout']})")
+    print(f"Bhej diya (layout {draft['layout']})")
 
 
 def approve_and_post(item, draft, jpg):
